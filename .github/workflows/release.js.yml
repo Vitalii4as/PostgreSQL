@@ -27,11 +27,14 @@ jobs:
 
     - name: Build plugin
       run: npm run build
+
+    - name: Rename build folder 
+      run: mv build ${{ github.event.repository.name }}
     
     - name: Zip build
       uses: montudor/action-zip@v1
       with:
-        args: zip -qq -r build.zip build
+        args: zip -qq -r ${{ github.event.repository.name }}.zip ${{ github.event.repository.name }}
 
     - name: Get release
       id: get_release
@@ -45,8 +48,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.github_token }}
       with:
         upload_url: ${{ steps.get_release.outputs.upload_url }}
-        asset_path: ./build.zip
-        asset_name: build.zip
+        asset_path: ./${{ github.event.repository.name }}.zip
+        asset_name: ${{ github.event.repository.name }}.zip
         asset_content_type: application/zip
 
     - name: update release
