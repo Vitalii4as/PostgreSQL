@@ -69,10 +69,37 @@ module.exports = ({
 		};
 	};
 
+
+	const getConstraintsWarnings = (invalidConstraints = []) => {
+		if (_.isEmpty(invalidConstraints)) {
+			return '';
+		}
+
+		return (
+			'\n\t' +
+			invalidConstraints
+				.map(keyData => {
+					const constraintName = keyData.name ? ` [constraint name: ${keyData.name}]` : '';
+
+					return `-- ${keyData.errorMessage}${constraintName}`;
+				})
+				.join('\n\t')
+		);
+	};
+
+	const additionalPropertiesForForeignKey = relationship => {
+		const foreignOnDelete = _.get(relationship, 'relationshipOnDelete', '');
+		const foreignOnUpdate = _.get(relationship, 'relationshipOnUpdate', '');
+		const foreignMatch = _.get(relationship, 'relationshipMatch', '');
+		return { foreignOnDelete, foreignOnUpdate, foreignMatch }
+	};
+
 	return {
 		generateConstraintsString,
 		foreignKeysToString,
 		foreignActiveKeysToString,
 		createKeyConstraint,
+		getConstraintsWarnings,
+		additionalPropertiesForForeignKey,
 	};
 };

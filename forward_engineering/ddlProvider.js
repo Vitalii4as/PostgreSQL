@@ -26,15 +26,21 @@ module.exports = (baseProvider, options, app) => {
 		divideIntoActivatedAndDeactivated,
 		commentIfDeactivated,
 	});
-	const { generateConstraintsString, foreignKeysToString, foreignActiveKeysToString, createKeyConstraint } =
-		require('./helpers/constraintsHelper')({
-			_,
-			commentIfDeactivated,
-			checkAllKeysDeactivated,
-			assignTemplates,
-			getColumnsList,
-			wrapInQuotes,
-		});
+	const {
+		generateConstraintsString,
+		foreignKeysToString,
+		foreignActiveKeysToString,
+		createKeyConstraint,
+		getConstraintsWarnings,
+		additionalPropertiesForForeignKey,
+	} = require('./helpers/constraintsHelper')({
+		_,
+		commentIfDeactivated,
+		checkAllKeysDeactivated,
+		assignTemplates,
+		getColumnsList,
+		wrapInQuotes,
+	});
 	const keyHelper = require('./helpers/keyHelper')(_, clean);
 
 	const { getFunctionsScript } = require('./helpers/functionHelper')({
@@ -59,7 +65,7 @@ module.exports = (baseProvider, options, app) => {
 		getColumnsList,
 	});
 
-	const { getUserDefinedType } = require('./helpers/udtHelper')({
+	const { getUserDefinedType, isNotPlainType } = require('./helpers/udtHelper')({
 		_,
 		commentIfDeactivated,
 		assignTemplates,
@@ -175,10 +181,18 @@ module.exports = (baseProvider, options, app) => {
 			});
 
 			const dividedKeysConstraints = divideIntoActivatedAndDeactivated(
-				keyConstraints.map(createKeyConstraint(templates, isActivated)),
+				keyConstraints
+					.filter(({ errorMessage }) => !errorMessage)
+					.map(createKeyConstraint(templates, isActivated)),
 				key => key.statement,
 			);
-			const keyConstraintsString = generateConstraintsString(dividedKeysConstraints, isActivated);
+			const constraintWarnings = getConstraintsWarnings(
+				keyConstraints.filter(({ errorMessage }) => errorMessage),
+			);
+			const keyConstraintsString = `${generateConstraintsString(
+				dividedKeysConstraints,
+				isActivated,
+			)}${constraintWarnings}`;
 			const keyConstraintsValue = partitionOf ? keyConstraintsString?.slice(1) : keyConstraintsString;
 
 			const dividedForeignKeys = divideIntoActivatedAndDeactivated(foreignKeyConstraints, key => key.statement);
@@ -309,6 +323,7 @@ module.exports = (baseProvider, options, app) => {
 				foreignTableActivated,
 				foreignSchemaName,
 				primarySchemaName,
+				customProperties
 			},
 			dbData,
 			schemaData,
@@ -321,11 +336,16 @@ module.exports = (baseProvider, options, app) => {
 				primaryTableActivated &&
 				foreignTableActivated;
 
+			const { foreignOnDelete, foreignOnUpdate, foreignMatch } = additionalPropertiesForForeignKey(customProperties);
+
 			const foreignKeyStatement = assignTemplates(templates.createForeignKeyConstraint, {
 				primaryTable: getNamePrefixedWithSchemaName(primaryTable, primarySchemaName || schemaData.schemaName),
 				name: name ? `CONSTRAINT ${wrapInQuotes(name)}` : '',
 				foreignKey: isActivated ? foreignKeysToString(foreignKey) : foreignActiveKeysToString(foreignKey),
 				primaryKey: isActivated ? foreignKeysToString(primaryKey) : foreignActiveKeysToString(primaryKey),
+				onDelete: foreignOnDelete ? ` ON DELETE ${foreignOnDelete}` : '',
+				onUpdate: foreignOnUpdate ? ` ON UPDATE ${foreignOnUpdate}` : '',
+				match: foreignMatch ? ` MATCH ${foreignMatch}` : '',
 			});
 
 			return {
@@ -345,6 +365,7 @@ module.exports = (baseProvider, options, app) => {
 				foreignTableActivated,
 				foreignSchemaName,
 				primarySchemaName,
+				customProperties,
 			},
 			dbData,
 			schemaData,
@@ -357,12 +378,17 @@ module.exports = (baseProvider, options, app) => {
 				primaryTableActivated &&
 				foreignTableActivated;
 
+			const { foreignOnDelete, foreignOnUpdate, foreignMatch } = additionalPropertiesForForeignKey(customProperties);
+
 			const foreignKeyStatement = assignTemplates(templates.createForeignKey, {
 				primaryTable: getNamePrefixedWithSchemaName(primaryTable, primarySchemaName || schemaData.schemaName),
 				foreignTable: getNamePrefixedWithSchemaName(foreignTable, foreignSchemaName || schemaData.schemaName),
 				name: name ? wrapInQuotes(name) : '',
 				foreignKey: isActivated ? foreignKeysToString(foreignKey) : foreignActiveKeysToString(foreignKey),
 				primaryKey: isActivated ? foreignKeysToString(primaryKey) : foreignActiveKeysToString(primaryKey),
+				onDelete: foreignOnDelete ? ` ON DELETE ${foreignOnDelete}` : '',
+				onUpdate: foreignOnUpdate ? ` ON UPDATE ${foreignOnUpdate}` : '',
+				match: foreignMatch ? ` MATCH ${foreignMatch}` : '',
 			});
 
 			return {
@@ -481,7 +507,7 @@ module.exports = (baseProvider, options, app) => {
 			};
 		},
 
-		hydrateColumn({ columnDefinition, jsonSchema, schemaData }) {
+		hydrateColumn({ columnDefinition, jsonSchema, schemaData, definitionJsonSchema = {} }) {
 			const collationRule = _.includes(['char', 'varchar', 'text'], columnDefinition.type)
 				? jsonSchema.collationRule
 				: '';
@@ -498,7 +524,7 @@ module.exports = (baseProvider, options, app) => {
 				unique: keyHelper.isInlineUnique(jsonSchema),
 				nullable: columnDefinition.nullable,
 				default: columnDefinition.default,
-				comment: jsonSchema.description,
+				comment: jsonSchema.refDescription || jsonSchema.description || definitionJsonSchema.description,
 				isActivated: columnDefinition.isActivated,
 				scale: columnDefinition.scale,
 				precision: columnDefinition.precision,
@@ -523,6 +549,15 @@ module.exports = (baseProvider, options, app) => {
 				intervalOptions,
 				dbVersion,
 			};
+		},
+
+		hydrateJsonSchemaColumn(jsonSchema, definitionJsonSchema) {
+			if (!jsonSchema.$ref || _.isEmpty(definitionJsonSchema) || isNotPlainType(definitionJsonSchema)) {
+				return jsonSchema;
+			}
+
+			jsonSchema = _.omit(jsonSchema, '$ref');
+			return { ...definitionJsonSchema, ...jsonSchema };
 		},
 
 		hydrateIndex(indexData, tableData, schemaData) {
