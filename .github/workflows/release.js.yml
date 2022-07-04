@@ -18,16 +18,20 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     
-    - name: Use Node.js ${{ matrix.node-version }} and build plugin
+    - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v3
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
-    - run: npm i
-    - run: npm run build
+
+    - name: Install modules
+      run: npm i
+
+    - name: Build plugin
+      run: npm run build
     
     - name: Zip build
-    - uses: montudor/action-zip@v1
+      uses: montudor/action-zip@v1
       with:
         args: zip -qq -r build.zip build
 
@@ -46,7 +50,7 @@ jobs:
         asset_content_type: application/zip
 
     - name: Create latest release 
-    - uses: marvinpinto/action-automatic-releases@latest
+      uses: marvinpinto/action-automatic-releases@latest
       with:
         automatic_release_tag: "latest"
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
