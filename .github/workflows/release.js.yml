@@ -55,7 +55,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ github.token }}
       with:
-        prerelease: true
+        prerelease: false
 
     # - name: Create latest release 
     #   uses: marvinpinto/action-automatic-releases@latest
