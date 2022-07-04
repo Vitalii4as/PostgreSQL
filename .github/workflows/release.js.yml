@@ -1,8 +1,6 @@
 on:
-  workflow_dispatch:
-  push:
-    tags:
-      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+  release:
+    types: [created]
 
 name: Create Release
 
@@ -35,24 +33,34 @@ jobs:
       with:
         args: zip -qq -r build.zip build
 
-    - name: Get tag
-      id: tag
-      uses: dawidd6/action-get-tag@v1
+    - name: Get release
+      id: get_release
+      uses: bruceadams/get-release@v1.2.3
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload Release Asset
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.github_token }}
       with:
-        upload_url: https://github.com/Vitalii4as/PostgreSQL/releases/tag/${{ steps.tag.outputs.tag }}
+        upload_url: ${{ steps.get_release.outputs.upload_url }}
         asset_path: ./build.zip
         asset_name: build.zip
         asset_content_type: application/zip
 
-    - name: Create latest release 
-      uses: marvinpinto/action-automatic-releases@latest
+    - name: update release
+      id: update_release
+      uses: tubone24/update_release@v1.0
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
       with:
-        automatic_release_tag: "latest"
-        repo_token: "${{ secrets.GITHUB_TOKEN }}"
-        prerelease: false
-        files: build.zip
+        prerelease: true
+
+    # - name: Create latest release 
+    #   uses: marvinpinto/action-automatic-releases@latest
+    #   with:
+    #     automatic_release_tag: "latest"
+    #     repo_token: "${{ secrets.GITHUB_TOKEN }}"
+    #     prerelease: false
+    #     files: build.zip
