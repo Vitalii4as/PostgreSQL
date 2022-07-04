@@ -33,6 +33,7 @@ esbuild.build({
 				'LICENSE',
 				'logo.png',
 				'README.md',
+				'package.json'
 			].map(path => ({
 				from: [path],
 				to: [path],
